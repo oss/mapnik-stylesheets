@@ -3,13 +3,11 @@ from math import pi,cos,sin,log,exp,atan
 from subprocess import call
 import sys, os
 from Queue import Queue
+import argparse
 
 import threading
 
-try:
-    import mapnik2 as mapnik
-except:
-    import mapnik
+import mapnik
 
 DEG_TO_RAD = pi/180
 RAD_TO_DEG = 180/pi
@@ -189,68 +187,51 @@ def render_tiles(bbox, mapfile, tile_dir, minZoom=1,maxZoom=18, name="unknown", 
         renderers[i].join()
 
 
+def render_specific(tiles, mapfile, tile_dir, name="unknown", num_threads=NUM_THREADS):
+    # Launch rendering threads
+    queue = Queue(32)
+    printLock = threading.Lock()
+    renderers = {}
+    for i in range(num_threads):
+        renderer = RenderThread(tile_dir, mapfile, queue, printLock, maxZoom)
+        render_thread = threading.Thread(target=renderer.loop)
+        render_thread.start()
+        #print "Started render thread %s" % render_thread.getName()
+        renderers[i] = render_thread
+
+    if not os.path.isdir(tile_dir):
+         os.mkdir(tile_dir)
+
+    for tile in tiles:
+        z, x, y = [int(dim) for dim in tile.split('/')]
+        tile_uri = os.path.join(tile_dir, tile)
+        t = (name, tile_uri, x, y, z)
+        try:
+            queue.put(t)
+        except KeyboardInterrupt:
+            raise SystemExit("Ctrl-c detected, exiting...")
+
+    # Signal render threads to exit by sending empty request to queue
+    for i in range(num_threads):
+        queue.put(None)
+    # wait for pending rendering jobs to complete
+    queue.join()
+    for i in range(num_threads):
+        renderers[i].join()
+
 
 if __name__ == "__main__":
-    home = os.environ['HOME']
-    try:
-        mapfile = os.environ['MAPNIK_MAP_FILE']
-    except KeyError:
-        mapfile = home + "/svn.openstreetmap.org/applications/rendering/mapnik/osm-local.xml"
-    try:
-        tile_dir = os.environ['MAPNIK_TILE_DIR']
-    except KeyError:
-        tile_dir = home + "/osm/tiles/"
+    parser = argparse.ArgumentParser(description='Render tiles')
+    parser.add_argument('-b', '--bbox', nargs=4, default=[-180.0, -90, 180.0, 90.0], type=float, help='bounding box that will be rendered')
+    parser.add_argument('-u', '--update-dirty', type=file)
+    parser.add_argument('-s', '--stylesheet')
+    parser.add_argument('-o', '--output-dir')
+    parser.add_argument('-z', '--min-zoom', default=0)
+    parser.add_argument('-Z', '--max-zoom', default=18)
+    args = parser.parse_args()
+    print args
 
-    if not tile_dir.endswith('/'):
-        tile_dir = tile_dir + '/'
-
-    #-------------------------------------------------------------------------
-    #
-    # Change the following for different bounding boxes and zoom levels
-    #
-    # Start with an overview
-    # World
-    bbox = (-180.0,-90.0, 180.0,90.0)
-
-    render_tiles(bbox, mapfile, tile_dir, 0, 5, "World")
-
-    minZoom = 10
-    maxZoom = 16
-    bbox = (-2, 50.0,1.0,52.0)
-    render_tiles(bbox, mapfile, tile_dir, minZoom, maxZoom)
-
-    # Muenchen
-    bbox = (11.4,48.07, 11.7,48.22)
-    render_tiles(bbox, mapfile, tile_dir, 1, 12 , "Muenchen")
-
-    # Muenchen+
-    bbox = (11.3,48.01, 12.15,48.44)
-    render_tiles(bbox, mapfile, tile_dir, 7, 12 , "Muenchen+")
-
-    # Muenchen++
-    bbox = (10.92,47.7, 12.24,48.61)
-    render_tiles(bbox, mapfile, tile_dir, 7, 12 , "Muenchen++")
-
-    # Nuernberg
-    bbox=(10.903198,49.560441,49.633534,11.038085)
-    render_tiles(bbox, mapfile, tile_dir, 10, 16, "Nuernberg")
-
-    # Karlsruhe
-    bbox=(8.179113,48.933617,8.489252,49.081707)
-    render_tiles(bbox, mapfile, tile_dir, 10, 16, "Karlsruhe")
-
-    # Karlsruhe+
-    bbox = (8.3,48.95,8.5,49.05)
-    render_tiles(bbox, mapfile, tile_dir, 1, 16, "Karlsruhe+")
-
-    # Augsburg
-    bbox = (8.3,48.95,8.5,49.05)
-    render_tiles(bbox, mapfile, tile_dir, 1, 16, "Augsburg")
-
-    # Augsburg+
-    bbox=(10.773251,48.369594,10.883834,48.438577)
-    render_tiles(bbox, mapfile, tile_dir, 10, 14, "Augsburg+")
-
-    # Europe+
-    bbox = (1.0,10.0, 20.6,50.0)
-    render_tiles(bbox, mapfile, tile_dir, 1, 11 , "Europe+")
+    if args.update_dirty:
+        render_specific(args.update_dirty.readlines(), args.stylesheet, args.output_dir)
+    else:
+        render_tiles(args.bbox, args.stylesheet, args.output_dir, args.min_zoom, args.max_zoom, "World")
