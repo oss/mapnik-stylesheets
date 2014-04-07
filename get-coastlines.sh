@@ -9,7 +9,7 @@
 
 UNZIP=/usr/bin/unzip
 TAR=/bin/tar
-BUNZIP2=/bin/bunzip2
+BUNZIP2=`which bunzip2`
 WGET=/usr/bin/wget
 
 if [ -z $1 ] ; then

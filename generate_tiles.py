@@ -229,7 +229,6 @@ if __name__ == "__main__":
     parser.add_argument('-z', '--min-zoom', default=0)
     parser.add_argument('-Z', '--max-zoom', default=18)
     args = parser.parse_args()
-    print args
 
     if args.update_dirty:
         render_specific(args.update_dirty.readlines(), args.stylesheet, args.output_dir)
