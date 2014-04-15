@@ -53,7 +53,7 @@ class GoogleProjection:
 
 
 class RenderThread:
-    def __init__(self, tile_dir, mapfile, q, printLock, maxZoom):
+    def __init__(self, tile_dir, mapfile, q, printLock, maxZoom, overwrite=False):
         self.tile_dir = tile_dir
         self.q = q
         self.m = mapnik.Map(256, 256)
@@ -64,6 +64,7 @@ class RenderThread:
         self.prj = mapnik.Projection(self.m.srs)
         # Projects between tile pixel co-ordinates and LatLong (EPSG:4326)
         self.tileproj = GoogleProjection(maxZoom+1)
+        self.overwrite = overwrite
 
 
     def render_tile(self, tile_uri, x, y, z):
@@ -108,7 +109,7 @@ class RenderThread:
                 (name, tile_uri, x, y, z) = r
 
             exists= ""
-            if os.path.isfile(tile_uri):
+            if not self.overwrite and os.path.isfile(tile_uri):
                 exists= "exists"
             else:
                 self.render_tile(tile_uri, x, y, z)
@@ -187,13 +188,13 @@ def render_tiles(bbox, mapfile, tile_dir, minZoom=1,maxZoom=18, name="unknown", 
         renderers[i].join()
 
 
-def render_specific(tiles, mapfile, tile_dir, name="unknown", num_threads=NUM_THREADS):
+def render_specific(tiles, mapfile, tile_dir, name="unknown", num_threads=NUM_THREADS, maxZoom=18):
     # Launch rendering threads
     queue = Queue(32)
     printLock = threading.Lock()
     renderers = {}
     for i in range(num_threads):
-        renderer = RenderThread(tile_dir, mapfile, queue, printLock, maxZoom)
+        renderer = RenderThread(tile_dir, mapfile, queue, printLock, maxZoom, overwrite=True)
         render_thread = threading.Thread(target=renderer.loop)
         render_thread.start()
         #print "Started render thread %s" % render_thread.getName()
@@ -204,8 +205,12 @@ def render_specific(tiles, mapfile, tile_dir, name="unknown", num_threads=NUM_TH
 
     for tile in tiles:
         z, x, y = [int(dim) for dim in tile.split('/')]
-        tile_uri = os.path.join(tile_dir, tile)
+        tile_uri = os.path.join(tile_dir, tile) + '.png'
         t = (name, tile_uri, x, y, z)
+        if not os.path.isdir(tile_dir + str(z)):
+            os.mkdir(tile_dir + str(z))
+        if not os.path.isdir(tile_dir + str(z) + '/' + str(x)):
+            os.mkdir(tile_dir + str(z) + '/' + str(x))
         try:
             queue.put(t)
         except KeyboardInterrupt:
@@ -231,6 +236,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.update_dirty:
-        render_specific(args.update_dirty.readlines(), args.stylesheet, args.output_dir)
+        render_specific(args.update_dirty.readlines(), args.stylesheet, args.output_dir, args.max_zoom)
     else:
         render_tiles(args.bbox, args.stylesheet, args.output_dir, args.min_zoom, args.max_zoom, "World")
