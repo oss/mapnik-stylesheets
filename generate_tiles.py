@@ -226,11 +226,11 @@ def render_specific(tiles, mapfile, tile_dir, name="unknown", num_threads=NUM_TH
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Render tiles')
+    parser = argparse.ArgumentParser(prog='render_tiles', description='Renders mapnik tiles')
+    parser.add_argument('stylesheet', help='The maps stylesheet to use')
+    parser.add_argument('output_dir', help='The tiles directory')
     parser.add_argument('-b', '--bbox', nargs=4, default=[-180.0, -90, 180.0, 90.0], type=float, help='bounding box that will be rendered')
     parser.add_argument('-u', '--update-dirty', type=file)
-    parser.add_argument('-s', '--stylesheet')
-    parser.add_argument('-o', '--output-dir')
     parser.add_argument('-z', '--min-zoom', default=0)
     parser.add_argument('-Z', '--max-zoom', default=18)
     args = parser.parse_args()
